@@ -1,0 +1,15 @@
+
+# 1. Persis seperti permintaanmu (1 endpoint dengan campuran normal, 4xx, dan 5xx):
+python3 custom_log_generator.py --path /api/report --status normal,error4xx,error5xx
+
+# Argumen typo --stautus juga tetap didukung otomatis:
+python3 custom_log_generator.py --path /api/report --stautus normal,error4xx,error5xx
+
+# 2. Tembak hanya status kode spesifik (misal: 200, 404, dan 500 saja):
+python3 custom_log_generator.py --path /api/report --status 200,404,500
+
+# 3. Multi-endpoint bergantian dengan status normal dan 4xx:
+python3 custom_log_generator.py --path /api/report,/api/orders --status normal,error4xx
+
+# 4. Batasi jumlah log dan percepat intervalnya (misal: 100 log, jeda 0.1 detik):
+python3 custom_log_generator.py --path /api/report --status normal,error5xx --count 100 --interval 0.1

@@ -1,0 +1,14 @@
+# 1. Response time buruk (> 4000 ms) pada 1 endpoint
+python3 generator_endpoint_rt.py --path /api/report --rt buruk --status normal
+
+# 2. Response time normal (40 - 300 ms) pada 1 endpoint
+python3 generator_endpoint_rt.py --path /api/report --rt normal --status normal
+
+# 3. Beberapa endpoint sekaligus dengan response time buruk (> 4000 ms)
+python3 generator_endpoint_rt.py --path /api/orders,/api/payments --rt buruk --status 200
+
+# 4. Gabungan response time normal & buruk (> 4000 ms) sekaligus
+python3 generator_endpoint_rt.py --path /api/orders/checkout --rt normal,buruk --status normal
+
+# 5. Rentang response time kustom (5000 - 15000 ms) sebanyak 50 log
+python3 generator_endpoint_rt.py --path /api/products/search --rt 5000-15000 --status 200 --count 50

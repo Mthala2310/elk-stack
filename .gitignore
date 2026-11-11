@@ -1,0 +1,59 @@
+# ==========================================
+# 1. ENVIRONMENT & CREDENTIALS (WAJIB AMAN)
+# ==========================================
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# ==========================================
+# 2. RAW LOGS & FILE DATA BESAR
+# ==========================================
+logs/
+*.log
+*.log.*
+*cleaned.log.txt
+
+# ==========================================
+# 3. SQLITE DATABASES & WORKER STATE
+# ==========================================
+*.sqlite
+*.sqlite3
+*.db
+incident-worker/data/
+notification-worker/state/
+report-worker/state/
+
+# ==========================================
+# 4. PYTHON VIRTUAL ENVIRONMENTS & CACHE
+# ==========================================
+.venv/
+venv/
+**/.venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# ==========================================
+# 5. NODE / FRONTEND BUILD & DEPENDENCIES
+# ==========================================
+workspace/node_modules/
+workspace/dist/
+workspace/dist-ssr/
+workspace/*.local
+
+# ==========================================
+# 6. OS & IDE ARTIFACTS
+# ==========================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/*
+!.vscode/extensions.json
+.idea/

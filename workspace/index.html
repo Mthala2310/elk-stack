@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <title>AI Log Observability Workspace</title>
+</head>
+
+<body>
+
+  <div id="app">
+
+    <iframe
+      id="kibana-frame"
+      src="http://localhost:5601"
+      title="Kibana Monitoring"
+    ></iframe>
+
+    <!-- FLOATING WORKSPACE TOOLS -->
+    <div id="workspace-tools" class="workspace-tools">
+
+      <!-- Menu yang muncul ketika tombol Tools diklik -->
+      <div
+        id="workspace-menu"
+        class="workspace-menu hidden"
+      >
+        <div class="workspace-menu-title">
+          WORKSPACE TOOLS
+        </div>
+
+        <button
+          id="menu-ai"
+          class="workspace-menu-item"
+          type="button"
+        >
+          <span class="tool-icon ai-icon">✦</span>
+          <span class="tool-info">
+            <strong>AI Copilot</strong>
+            <small>Analisis log dengan AI</small>
+          </span>
+          <span class="menu-arrow">›</span>
+        </button>
+
+        <button
+          id="menu-report"
+          class="workspace-menu-item"
+          type="button"
+        >
+          <span class="tool-icon report-icon">▥</span>
+          <span class="tool-info">
+            <strong>Monitoring Report</strong>
+            <small>Laporan monitoring</small>
+          </span>
+          <span class="menu-arrow">›</span>
+        </button>
+      </div>
+
+      <!-- Satu tombol utama -->
+      <button
+        id="workspace-launcher"
+        class="workspace-launcher"
+        type="button"
+        aria-label="Open Workspace Tools"
+        aria-expanded="false"
+        aria-controls="workspace-menu"
+      >
+        <span class="launcher-symbol">✦</span>
+        <span>Tools</span>
+        <span class="launcher-chevron">⌃</span>
+      </button>
+
+    </div>
+
+    <aside
+      id="ai-panel"
+      class="ai-panel hidden"
+    >
+
+      <div class="ai-header">
+
+        <div>
+          <strong>AI Copilot</strong>
+          <div class="ai-subtitle">
+            Evidence-based log analysis
+          </div>
+          <div
+            id="active-index-label"
+            class="ai-index-label"
+          >
+            Index aktif: belum dipilih
+          </div>
+        </div>
+
+        <button
+          id="ai-close"
+          class="close-button"
+          aria-label="Close AI Copilot"
+        >
+          ×
+        </button>
+
+      </div>
+
+      <div
+        id="ai-messages"
+        class="ai-messages"
+      >
+
+        <div class="message assistant">
+          Halo. Saya dapat membantu menganalisis log
+          menggunakan evidence dari Elasticsearch.
+        </div>
+
+      </div>
+
+      <form id="ai-form">
+
+        <textarea
+          id="ai-input"
+          placeholder="Contoh: Analisis error pada app-logs-* antara ..."
+          rows="3"
+        ></textarea>
+
+        <button
+          id="ai-send"
+          type="submit"
+        >
+          Kirim
+        </button>
+
+      </form>
+
+    </aside>
+
+    <!-- MANUAL REPORT PANEL -->
+    <aside
+      id="report-panel"
+      class="ai-panel hidden"
+      aria-label="Manual Monitoring Report"
+    >
+      <div class="ai-header">
+        <div>
+          <strong>Monitoring Report</strong>
+          <div class="ai-subtitle">
+            Manual report generation
+          </div>
+        </div>
+
+        <button
+          id="report-close"
+          class="close-button"
+          type="button"
+          aria-label="Close Report Panel"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="report-body">
+
+        <div class="report-field">
+          <label for="report-index">
+            Elasticsearch Index
+          </label>
+
+          <input
+            id="report-index"
+            class="report-control"
+            type="text"
+            value="app-logs-*"
+          />
+        </div>
+
+        <div class="report-field">
+          <label for="report-period">
+            Monitoring Period
+          </label>
+
+          <select
+            id="report-period"
+            class="report-control"
+          >
+            <option value="15">
+              15 menit terakhir
+            </option>
+
+            <option value="60" selected>
+              1 jam terakhir
+            </option>
+
+            <option value="1440">
+              24 jam terakhir
+            </option>
+
+            <option value="custom">
+              Custom Date & Time
+            </option>
+          </select>
+        </div>
+
+        <div
+          id="custom-range"
+          class="report-custom-range hidden"
+        >
+          <div class="report-field">
+            <label for="report-start">
+              Start Date & Time
+            </label>
+            <input
+              id="report-start"
+              class="report-control"
+              type="datetime-local"
+            />
+          </div>
+
+          <div class="report-field">
+            <label for="report-end">
+              End Date & Time
+            </label>
+            <input
+              id="report-end"
+              class="report-control"
+              type="datetime-local"
+            />
+          </div>
+        </div>
+
+        <div class="report-features">
+          <strong>Report Contents</strong>
+
+          <p>✓ Total Requests</p>
+          <p>✓ HTTP 2xx / 3xx / 4xx / 5xx</p>
+          <p>✓ Error Rate</p>
+          <p>✓ Top Error Endpoints</p>
+          <p>✓ Slow Requests</p>
+          <p>✓ Data Freshness</p>
+          <p>✓ Kibana Dashboard Screenshot (Phase 9.6)</p>
+        </div>
+
+        <!-- Hasil laporan akan muncul di sini -->
+        <section
+          id="report-result"
+          class="report-result"
+          aria-live="polite"
+          hidden
+        ></section>
+
+      </div>
+
+      <div class="report-footer">
+        <button
+          id="generate-report"
+          type="button"
+        >
+          ⚡ Generate Report
+        </button>
+
+        <small class="report-hint">
+          Analisis metrik & error realtime dari Elasticsearch
+        </small>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <script
+    type="module"
+    src="/src/main.js"
+  ></script>
+
+</body>
+</html>

@@ -1,0 +1,11 @@
+FASTAPI
+source .venv/bin/activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+VITE
+mthala@Mthala:~/elk-stack$ cd workspace
+mthala@Mthala:~/elk-stack/workspace$ npm run dev -- --host 0.0.0.0
+
+incident-worker
+cd ~/elk-stack/incident-worker
+.venv/bin/python3 worker.py --once

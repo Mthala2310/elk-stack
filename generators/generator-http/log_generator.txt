@@ -1,0 +1,50 @@
+# ==========================================
+# DAFTAR EKSEKUSI TERMINAL LOG_GENERATOR.PY
+# ==========================================
+
+# 1. Bantuan & Dokumentasi CLI[cite: 1]
+python3 log_generator.py --help
+python3 log_generator.py -h
+
+# 2. Eksekusi Standar (default: mode normal, interval 0.5s, output logs/application.log, generate tanpa henti sampai Ctrl+C)[cite: 1]
+python3 log_generator.py
+
+# 3. Pilihan Mode Trafik[cite: 1]
+python3 log_generator.py --mode normal          # Mayoritas status 2xx / lalu lintas wajar[cite: 1]
+python3 log_generator.py --mode 4xx-spike       # Lonjakan error klien (401, 403, 404, 429)[cite: 1]
+python3 log_generator.py --mode 5xx-spike       # Lonjakan error server (500, 502, 503, 504)[cite: 1]
+python3 log_generator.py --mode slow-response   # Lonjakan latensi tinggi (3000-12000 ms)[cite: 1]
+python3 log_generator.py --mode mixed           # Campuran merata respons normal, error, dan slow response[cite: 1]
+
+# 4. Pengaturan Jumlah Log (--count)[cite: 1]
+python3 log_generator.py --count 50             # Berhenti otomatis setelah 50 baris log[cite: 1]
+python3 log_generator.py --count 1000           # Berhenti otomatis setelah 1000 baris log[cite: 1]
+
+# 5. Pengaturan Kecepatan / Jeda Antar-Log (--interval dalam detik)[cite: 1]
+python3 log_generator.py --interval 0.1         # Log cepat tiap 0.1 detik[cite: 1]
+python3 log_generator.py --interval 2.0         # Log santai tiap 2 detik[cite: 1]
+python3 log_generator.py --interval 0           # Tanpa jeda (secepat performa CPU / I/O)[cite: 1]
+
+# 6. Menentukan Lokasi File Output (--output)[cite: 1]
+python3 log_generator.py --output logs/test.log
+python3 log_generator.py --output custom_folder/server_traffic.log
+python3 log_generator.py --output /tmp/app_stream.log
+
+# 7. Mengunci Urutan Nilai Acak (--seed)[cite: 1]
+python3 log_generator.py --seed 42 --count 20
+
+# 8. Uji Nilai Dash / Anomali Parser Logstash (rentang 0.0 - 1.0)[cite: 1]
+python3 log_generator.py --dash-size-rate 1.0              # Seluruh request_size bernilai "-"[cite: 1]
+python3 log_generator.py --dash-referrer-rate 1.0          # Seluruh referrer bernilai "-"[cite: 1]
+python3 log_generator.py --omit-response-time-rate 1.0     # Hilangkan field response_time dari log[cite: 1]
+python3 log_generator.py --dash-size-rate 0 --dash-referrer-rate 0 --omit-response-time-rate 0 # Log bersih tanpa field kosong[cite: 1]
+
+# 9. Kombinasi Skenario Praktis[cite: 1]
+# Simulasi insiden server down: 500 log 5xx dengan jeda cepat 0.05s[cite: 1]
+python3 log_generator.py --mode 5xx-spike --interval 0.05 --count 500 --output logs/server_incident.log
+
+# Stress test parser / pipeline monitoring: 20000 log mixed tanpa jeda[cite: 1]
+python3 log_generator.py --mode mixed --interval 0 --count 20000 --output logs/stress_test.log
+
+# Uji ketahanan parser anomali: slow response dengan kombinasi probabilitas field "-" tinggi[cite: 1]
+python3 log_generator.py --mode slow-response --dash-size-rate 0.5 --dash-referrer-rate 0.8 --omit-response-time-rate 0.2 --count 100

@@ -1,0 +1,16 @@
+filebeat.inputs:
+  - type: filestream
+    id: application-log
+    enabled: true
+    paths:
+      - /logs/*.log
+
+output.redis:
+  hosts:
+    - "redis:6379"
+  key: "logs"
+  db: 0
+  datatype: "list"
+
+logging.level: info
+logging.to_files: false
