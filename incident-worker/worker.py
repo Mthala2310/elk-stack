@@ -207,7 +207,7 @@ def poll_logs():
     elif http_events > 0:
         schema_detected = "http_access"
     else:
-        schemva_detected = "unknown"
+        schema_detected = "unknown"
 
     # Hindari pembagian nol
     def rate(count, denominator=None):
