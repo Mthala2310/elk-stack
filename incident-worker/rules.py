@@ -15,7 +15,11 @@ class RuleConfig:
     min_5xx_errors: int = 10
     rate_4xx_threshold: float = 20.0
     min_4xx_errors: int = 30
-    # Minimal error pada endpoint yang sama
+    # Microservice APM / Tracing thresholds
+    apm_min_total_events: int = 50
+    apm_error_rate_threshold: float = 5.0
+    apm_min_errors: int = 10
+    # Minimal error pada endpoint / service yang sama
     repeated_min_errors: int = 10
     latency_threshold_ms: int = 4000
     latency_min_samples: int = 100
@@ -25,9 +29,13 @@ class RuleConfig:
         if self.min_total_requests < 1:
             raise ValueError("Minimal request harus >= 1.")
 
+        if self.apm_min_total_events < 1:
+            raise ValueError("apm_min_total_events harus >= 1.")
+
         for count in (
             self.min_5xx_errors,
             self.min_4xx_errors,
+            self.apm_min_errors,
         ):
             if count < 1:
                 raise ValueError("Minimal jumlah error harus >= 1.")
@@ -40,6 +48,7 @@ class RuleConfig:
         for rate in (
             self.rate_5xx_threshold,
             self.rate_4xx_threshold,
+            self.apm_error_rate_threshold,
         ):
             if not 0 <= rate <= 100:
                 raise ValueError("Threshold rate harus antara 0-100.")
@@ -75,6 +84,15 @@ class RuleConfig:
                 os.getenv("INCIDENT_4XX_RATE_THRESHOLD_PERCENT", "20.0")
             ),
             min_4xx_errors=int(os.getenv("INCIDENT_4XX_MIN_ERRORS", "30")),
+            apm_min_total_events=int(
+                os.getenv("INCIDENT_APM_MIN_TOTAL_EVENTS", "50")
+            ),
+            apm_error_rate_threshold=float(
+                os.getenv("INCIDENT_APM_ERROR_RATE_THRESHOLD_PERCENT", "5.0")
+            ),
+            apm_min_errors=int(
+                os.getenv("INCIDENT_APM_MIN_ERRORS", "10")
+            ),
             repeated_min_errors=int(
                 os.getenv(
                     "INCIDENT_REPEATED_MIN_ERRORS",
@@ -114,11 +132,24 @@ def evaluate_rate_rule(
     rate_threshold: float,
     min_errors: int,
     min_total_requests: int,
+    applicable: bool = True,
 ) -> dict:
     threshold_obj = {
         "rate_percent": rate_threshold,
         "min_error_count": min_errors,
     }
+
+    if not applicable:
+        return {
+            "rule_id": rule_id,
+            "status": "NOT_APPLICABLE",
+            "total_events": total_events,
+            "error_count": error_count,
+            "error_rate_percent": None,
+            "threshold": threshold_obj,
+            "threshold_rate_percent": rate_threshold,
+            "min_errors": min_errors,
+        }
 
     if total_events == 0:
         return {
@@ -169,7 +200,7 @@ def evaluate_repeated_endpoints(
     window_total_events: int,
 ) -> dict:
     triggered = []
-    # Evaluasi setiap endpoint hasil agregasi
+    # Evaluasi setiap endpoint/service hasil agregasi
     for item in endpoint_snapshot["paths"]:
         error_count = item["error_count"]
         if error_count >= min_error_count:
@@ -279,6 +310,7 @@ def evaluate_latency_rule(
     return {
         "rule_id": "HIGH_RESPONSE_TIME",
         "status": status,
+        "schema_detected": latency_snapshot.get("schema_detected"),
         "sample_count": samples,
         "p95_ms": p95,
         "slow_request_count": slow_count,
@@ -303,28 +335,53 @@ def evaluate_rules(
     count_4xx = snapshot.get("count_4xx", 0)
     count_5xx = snapshot.get("count_5xx", 0)
 
+    has_schema_counts = (
+        "http_events" in snapshot or "apm_events" in snapshot
+    )
+    http_events = (
+        snapshot.get("http_events", 0) if has_schema_counts else total
+    )
+    apm_events = snapshot.get("apm_events", 0)
+    count_error_logs = snapshot.get("count_error_logs", 0)
+
+    # Rule HTTP hanya applicable jika memang ada trafik HTTP (atau window kosong -> NO_DATA)
+    http_applicable = (total == 0) or (http_events > 0)
+    # Rule APM hanya applicable jika memang ada trafik APM (atau window kosong -> NO_DATA)
+    apm_applicable = (total == 0) or (apm_events > 0)
+
     rule_5xx = evaluate_rate_rule(
         rule_id="HIGH_5XX_ERROR_RATE",
-        total_events=total,
+        total_events=http_events,
         error_count=count_5xx,
         rate_threshold=config.rate_5xx_threshold,
         min_errors=config.min_5xx_errors,
         min_total_requests=config.min_total_requests,
+        applicable=http_applicable,
     )
 
     rule_4xx = evaluate_rate_rule(
         rule_id="HIGH_4XX_ERROR_RATE",
-        total_events=total,
+        total_events=http_events,
         error_count=count_4xx,
         rate_threshold=config.rate_4xx_threshold,
         min_errors=config.min_4xx_errors,
         min_total_requests=config.min_total_requests,
+        applicable=http_applicable,
     )
 
-    rules = [rule_5xx, rule_4xx]
+    rule_apm_errors = evaluate_rate_rule(
+        rule_id="HIGH_ERROR_LOG_RATE",
+        total_events=apm_events,
+        error_count=count_error_logs,
+        rate_threshold=config.apm_error_rate_threshold,
+        min_errors=config.apm_min_errors,
+        min_total_requests=config.apm_min_total_events,
+        applicable=apm_applicable,
+    )
 
-    # Tambahkan evaluasi repeated endpoint
-    # tanpa mengubah rule 4xx dan 5xx.
+    rules = [rule_5xx, rule_4xx, rule_apm_errors]
+
+    # Tambahkan evaluasi repeated endpoint / service
     if endpoint_snapshot is not None:
         repeated_rule = evaluate_repeated_endpoints(
             endpoint_snapshot=endpoint_snapshot,
@@ -341,7 +398,7 @@ def evaluate_rules(
             )
         rules.append(stale_rule)
 
-    # Tambahkan rule High Response Time
+    # Tambahkan rule High Response Time (Dual-Mode HTTP + APM duration_ms)
     if latency_snapshot is not None:
         latency_rule = evaluate_latency_rule(
             latency_snapshot=latency_snapshot,
@@ -357,13 +414,16 @@ def evaluate_rules(
         eval_status = "TRIGGERED"
     elif total == 0:
         eval_status = "NO_DATA"
-    elif total < config.min_total_requests:
+    elif any(r["status"] == "NORMAL" for r in rules):
+        eval_status = "NORMAL"
+    elif any(r["status"] == "LOW_TRAFFIC" for r in rules):
         eval_status = "LOW_TRAFFIC"
     else:
         eval_status = "NORMAL"
 
     return {
         "index": snapshot.get("index", "app-logs-*"),
+        "schema_detected": snapshot.get("schema_detected"),
         "window_start": snapshot.get("window_start"),
         "window_end": snapshot.get("window_end"),
         "evaluation_status": eval_status,

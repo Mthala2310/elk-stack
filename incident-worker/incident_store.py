@@ -318,12 +318,13 @@ def apply_incident_lifecycle(
             status = rule["status"]
 
             # ---------------------------
-            # HIGH 4XX & HIGH 5XX
+            # HIGH 4XX, HIGH 5XX & HIGH ERROR LOG RATE
             # ---------------------------
 
             if rule_id in {
                 "HIGH_4XX_ERROR_RATE",
                 "HIGH_5XX_ERROR_RATE",
+                "HIGH_ERROR_LOG_RATE",
             }:
                 if status == "TRIGGERED":
                     evidence = {

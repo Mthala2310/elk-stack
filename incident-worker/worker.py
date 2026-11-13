@@ -116,47 +116,128 @@ def poll_logs():
         }
     }
 
-    # Ambil agregasi dari Elasticsearch
+    # Ambil agregasi Dual-Mode (HTTP + Microservice APM) dari Elasticsearch
     result = es.search(
         index=INDEX,
         size=0,
         track_total_hits=True,
         query=query,
         aggs={
+            # --- HTTP Access Log Metrics ---
+            "http_events": {
+                "filter": {"exists": {"field": "status_code"}}
+            },
             "http_4xx": {
                 "filter": {"range": {"status_code": {"gte": 400, "lt": 500}}}
             },
             "http_5xx": {
                 "filter": {"range": {"status_code": {"gte": 500, "lt": 600}}}
             },
+            # --- Microservice APM / Tracing Log Metrics ---
+            "apm_events": {
+                "filter": {
+                    "bool": {
+                        "should": [
+                            {"exists": {"field": "log_level"}},
+                            {"exists": {"field": "trace_id"}},
+                            {"exists": {"field": "service_name"}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            },
+            "apm_error_logs": {
+                "filter": {
+                    "bool": {
+                        "should": [
+                            {"term": {"log_level.keyword": "ERROR"}},
+                            {"term": {"log_level": "ERROR"}},
+                            {"term": {"log_level": "error"}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            },
+            "apm_warn_logs": {
+                "filter": {
+                    "bool": {
+                        "should": [
+                            {"term": {"log_level.keyword": "WARN"}},
+                            {"term": {"log_level": "WARN"}},
+                            {"term": {"log_level": "warn"}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            },
+            "apm_execution_metrics": {
+                "filter": {
+                    "bool": {
+                        "should": [
+                            {"term": {"is_execution_metric.keyword": "true"}},
+                            {"term": {"is_execution_metric": "true"}},
+                            {"term": {"perf_action.keyword": "End"}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            },
         },
     )
 
     # Hitung hasil query
+    aggs = result["aggregations"]
     total = result["hits"]["total"]["value"]
 
-    count_4xx = result["aggregations"]["http_4xx"]["doc_count"]
+    http_events = aggs["http_events"]["doc_count"]
+    count_4xx = aggs["http_4xx"]["doc_count"]
+    count_5xx = aggs["http_5xx"]["doc_count"]
 
-    count_5xx = result["aggregations"]["http_5xx"]["doc_count"]
+    apm_events = aggs["apm_events"]["doc_count"]
+    count_error_logs = aggs["apm_error_logs"]["doc_count"]
+    count_warn_logs = aggs["apm_warn_logs"]["doc_count"]
+    execution_metrics_count = aggs["apm_execution_metrics"]["doc_count"]
+
+    if total == 0:
+        schema_detected = "no_data"
+    elif http_events > 0 and apm_events > 0:
+        schema_detected = "hybrid"
+    elif apm_events > 0:
+        schema_detected = "microservice_tracing"
+    elif http_events > 0:
+        schema_detected = "http_access"
+    else:
+        schemva_detected = "unknown"
 
     # Hindari pembagian nol
-    def rate(count):
-        if total == 0:
+    def rate(count, denominator=None):
+        denom = total if denominator is None else denominator
+        if denom == 0:
             return None
 
-        return round(count / total * 100, 2)
+        return round(count / denom * 100, 2)
 
-    # Kembalikan hasil pemeriksaan
+    # Kembalikan hasil pemeriksaan (backward-compatible)
     return {
         "status": "NO_DATA" if total == 0 else "OBSERVED",
+        "schema_detected": schema_detected,
         "index": INDEX,
         "window_start": start.isoformat(),
         "window_end": end.isoformat(),
         "total_events": total,
+        # HTTP metrics
+        "http_events": http_events,
         "count_4xx": count_4xx,
         "count_5xx": count_5xx,
         "rate_4xx_percent": rate(count_4xx),
         "rate_5xx_percent": rate(count_5xx),
+        # Microservice APM metrics
+        "apm_events": apm_events,
+        "count_error_logs": count_error_logs,
+        "count_warn_logs": count_warn_logs,
+        "rate_error_logs_percent": rate(count_error_logs),
+        "apm_error_rate_percent": rate(count_error_logs, apm_events),
+        "execution_metrics_count": execution_metrics_count,
     }
 
 
@@ -178,7 +259,7 @@ def main():
 
     while True:
         try:
-            # 1. Ambil statistik HTTP keseluruhan
+            # 1. Ambil statistik log keseluruhan (Dual-Mode: HTTP + Microservice APM)
             data = poll_logs()
 
             # 2. Ambil error berdasarkan endpoint
