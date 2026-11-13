@@ -73,11 +73,19 @@ def _top_paths(data):
 
     for item in _walk_records(data):
 
-        path = _safe_path(
+        raw_path = (
             item.get("path")
             or item.get("request_path")
             or item.get("key")
         )
+        # Fallback jalur untuk Microservice APM
+        if not raw_path and item.get("service_name"):
+            step = item.get("step_name")
+            raw_path = f"/service/{item['service_name']}->{step}" if step else f"/service/{item['service_name']}"
+        elif not raw_path and item.get("caller_class"):
+            raw_path = f"/class/{item['caller_class']}"
+
+        path = _safe_path(raw_path)
 
         count = item.get(
             "error_count",
@@ -89,10 +97,22 @@ def _top_paths(data):
             and type(count) is int
             and count >= 0
         ):
-            result.append({
+            record = {
                 "path": path,
                 "error_count": count,
-            })
+            }
+            if "target_type" in item:
+                record["target_type"] = item["target_type"]
+            if "service_name" in item:
+                record["service_name"] = item["service_name"]
+            if "steps" in item:
+                record["steps"] = item["steps"]
+            if "caller_class" in item:
+                record["caller_class"] = item["caller_class"]
+            if "methods" in item:
+                record["methods"] = item["methods"]
+
+            result.append(record)
 
     result.sort(
         key=lambda item: -item["error_count"]
@@ -110,24 +130,46 @@ def _slow_samples(data):
 
     for item in _walk_records(data):
 
+        # Utamakan response_time (HTTP), jika null fallback ke duration_ms (Microservice APM)
         duration = item.get("response_time")
+        if duration is None:
+            duration = item.get("duration_ms")
+        if duration is None:
+            duration = item.get("effective_duration_ms")
 
-        path = _safe_path(
+        raw_path = (
             item.get("request_path")
             or item.get("path")
         )
+        if not raw_path and item.get("service_name"):
+            step = item.get("step_name")
+            raw_path = f"/{item['service_name']}->{step}" if step else f"/{item['service_name']}"
+        elif not raw_path and item.get("caller_class"):
+            raw_path = f"/{item['caller_class']}"
+
+        path = _safe_path(raw_path)
 
         if (
             path
             and type(duration) in (int, float)
             and duration >= 0
         ):
-            result.append({
+            sample = {
                 "path": path,
                 "response_time_ms": duration,
                 "status_code": item.get("status_code"),
                 "timestamp": item.get("@timestamp"),
-            })
+            }
+            if "trace_id" in item:
+                sample["trace_id"] = item["trace_id"]
+            if "service_name" in item:
+                sample["service_name"] = item["service_name"]
+            if "step_name" in item:
+                sample["step_name"] = item["step_name"]
+            if "perf_action" in item:
+                sample["perf_action"] = item["perf_action"]
+
+            result.append(sample)
 
     result.sort(
         key=lambda item: -item["response_time_ms"]
@@ -288,6 +330,7 @@ def build_monitoring_report(
     return {
         "report_type": "deterministic_monitoring",
         "index": index,
+        "schema_detected": summary.get("schema_detected", "unknown"),
 
         "period": {
             "start": start.astimezone(WIB).isoformat(),
@@ -304,11 +347,20 @@ def build_monitoring_report(
 
         "total_requests": summary["total_events"],
 
+        # HTTP metrics
         "status_classes": summary["status_classes"],
-
         "status_distribution": summary[
             "status_distribution"
         ],
+
+        # Microservice APM metrics
+        "log_levels": summary.get("log_levels", {}),
+        "log_level_distribution": summary.get(
+            "log_level_distribution", {}
+        ),
+        "execution_metrics_count": summary.get(
+            "execution_metrics_count", 0
+        ),
 
         "errors": summary["errors"],
 
