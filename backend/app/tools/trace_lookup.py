@@ -3,6 +3,7 @@ from typing import Any
 
 from app.es_client import get_es_client
 from app.tools.validators import validate_index_pattern, validate_limit
+from app.tools.time_utils import to_wib_iso, to_wib_str
 
 
 def _format_caller(ev: dict[str, Any]) -> str | None:
@@ -117,26 +118,32 @@ def get_trace_timeline(
         action = ev.get("perf_action")
 
         if step and action == "End" and dur is not None:
+            raw_ts = ev.get("@timestamp")
             steps.append({
                 "step_name": step,
                 "duration_ms": dur,
-                "timestamp": ev.get("@timestamp"),
+                "timestamp": to_wib_str(raw_ts) or to_wib_iso(raw_ts),
+                "timestamp_iso": to_wib_iso(raw_ts),
                 "caller": caller,
             })
             total_step_duration_ms += dur
 
         # 3. Deteksi Error & Warning
         if level == "ERROR":
+            raw_ts = ev.get("@timestamp")
             error_logs.append({
-                "timestamp": ev.get("@timestamp"),
+                "timestamp": to_wib_str(raw_ts) or to_wib_iso(raw_ts),
+                "timestamp_iso": to_wib_iso(raw_ts),
                 "caller": caller,
                 "step_name": step,
                 "message": ev.get("message") or ev.get("log_payload"),
             })
 
-        # 4. Susun event timeline yang ringkas (hemat token untuk AI)
+        # 4. Susun event timeline yang ringkas (hemat token untuk AI, waktu dalam WIB)
+        raw_ev_ts = ev.get("@timestamp")
         compact_ev: dict[str, Any] = {
-            "@timestamp": ev.get("@timestamp"),
+            "@timestamp": to_wib_str(raw_ev_ts) or to_wib_iso(raw_ev_ts),
+            "timestamp_iso": to_wib_iso(raw_ev_ts),
             "log_level": ev.get("log_level"),
         }
         if caller:
@@ -159,15 +166,20 @@ def get_trace_timeline(
 
         timeline.append(compact_ev)
 
-    start_time = events[0].get("@timestamp")
-    end_time = events[-1].get("@timestamp")
+    start_time_raw = events[0].get("@timestamp")
+    end_time_raw = events[-1].get("@timestamp")
+
+    start_time_wib = to_wib_str(start_time_raw)
+    end_time_wib = to_wib_str(end_time_raw)
+    start_time_iso = to_wib_iso(start_time_raw)
+    end_time_iso = to_wib_iso(end_time_raw)
 
     # Hitung total waktu wall-clock end-to-end dari event pertama hingga terakhir
     end_to_end_duration_ms = None
-    if start_time and end_time:
+    if start_time_raw and end_time_raw:
         try:
-            dt_start = datetime.fromisoformat(str(start_time).replace("Z", "+00:00"))
-            dt_end = datetime.fromisoformat(str(end_time).replace("Z", "+00:00"))
+            dt_start = datetime.fromisoformat(str(start_time_raw).replace("Z", "+00:00"))
+            dt_end = datetime.fromisoformat(str(end_time_raw).replace("Z", "+00:00"))
             end_to_end_duration_ms = round((dt_end - dt_start).total_seconds() * 1000)
         except ValueError:
             pass
@@ -186,8 +198,12 @@ def get_trace_timeline(
         "service_name": service_name,
         "service_version": service_version,
         "status": status,
-        "start_time": start_time,
-        "end_time": end_time,
+        "start_time": start_time_wib or start_time_iso,
+        "end_time": end_time_wib or end_time_iso,
+        "start_time_wib": start_time_wib,
+        "end_time_wib": end_time_wib,
+        "start_time_iso": start_time_iso,
+        "end_time_iso": end_time_iso,
         "end_to_end_duration_ms": end_to_end_duration_ms,
         "total_step_duration_ms": total_step_duration_ms,
         "total_spans_matched": total_events,

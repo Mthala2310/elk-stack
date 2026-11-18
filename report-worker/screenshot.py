@@ -15,7 +15,11 @@ from urllib.parse import (
 from contextlib import closing
 
 from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright
+
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None
 
 
 # ====================================
@@ -201,6 +205,9 @@ def make_dashboard_url(
 # ====================================
 
 def capture_dashboard(url, output_path):
+
+    if sync_playwright is None:
+        raise RuntimeError("Playwright belum terpasang.")
 
     output_path.parent.mkdir(
         parents=True,

@@ -211,7 +211,8 @@ def read_events(baseline):
                     e.occurred_at,
                     e.evidence_json,
                     i.rule_id,
-                    i.index_pattern
+                    i.index_pattern,
+                    i.endpoint
                 FROM incident_events e
                 JOIN incidents i
                   ON i.id = e.incident_id
@@ -265,7 +266,8 @@ def process_retries(conn):
                     e.occurred_at,
                     e.evidence_json,
                     i.rule_id,
-                    i.index_pattern
+                    i.index_pattern,
+                    i.endpoint
                 FROM incident_events e
                 JOIN incidents i
                   ON i.id = e.incident_id
@@ -293,12 +295,10 @@ def to_wib(value):
 
 
 def build_message(event):
-
-    evidence = json.loads(
-        event["evidence_json"]
-    )
-
+    evidence = json.loads(event["evidence_json"])
     is_open = event["event_type"] == "OPEN"
+    rule_id = event.get("rule_id", "UNKNOWN")
+    endpoint = event.get("endpoint")
 
     title = (
         "🚨 INCIDENT OPEN"
@@ -310,49 +310,124 @@ def build_message(event):
         title,
         "",
         f"Incident ID: #{event['incident_id']}",
-        f"Rule: {event['rule_id']}",
+        f"Rule: {rule_id}",
+    ]
+
+    # Identifikasi Target (Microservice vs Class Fallback vs HTTP Endpoint)
+    if endpoint:
+        if endpoint.startswith("/service/"):
+            svc_name = endpoint[len("/service/"):]
+            lines.append(f"Service: {svc_name}")
+        elif endpoint.startswith("/class/"):
+            cls_name = endpoint[len("/class/"):]
+            lines.append(f"Caller Class: {cls_name}")
+        else:
+            lines.append(f"Endpoint: {endpoint}")
+
+    lines.extend([
         f"Index: {event['index_pattern']}",
         f"Event Time: {to_wib(event['occurred_at'])}",
         f"Status: {event['event_type']}",
-    ]
-
-    # Evidence RESOLVED dari SQLite merupakan
-    # evidence terakhir ketika incident aktif,
-    # bukan metrik pemulihan terkini.
-    lines.extend([
         "",
         (
             "Evidence saat terdeteksi:"
             if is_open
             else "Evidence terakhir saat incident aktif:"
-        )
+        ),
     ])
 
-    allowed_fields = {
-        "window_start": "Window Start",
-        "window_end": "Window End",
-        "total_events": "Total Events",
-        "error_count": "Error Count",
-        "error_rate_percent": "Error Rate (%)",
-        "p95_ms": "P95 (ms)",
-        "slow_request_count": "Slow Requests",
-        "age_seconds": "Log Age (seconds)",
-        "reason": "Reason",
-    }
+    # Rincian Evidence berdasarkan jenis Rule (Dual-Mode: HTTP vs Microservice APM)
+    if rule_id == "HIGH_ERROR_LOG_RATE":
+        lines.append("Tipe: Microservice APM / Tracing")
+        if "total_events" in evidence:
+            lines.append(f"Total Log APM: {evidence['total_events']}")
+        if "error_count" in evidence:
+            lines.append(f"Error Logs Count: {evidence['error_count']}")
+        if "error_rate_percent" in evidence:
+            thresh = evidence.get(
+                "threshold_rate_percent",
+                evidence.get("threshold", {}).get("rate_percent", 5.0),
+            )
+            lines.append(f"Error Rate: {evidence['error_rate_percent']}% (Batas: {thresh}%)")
 
-    for key, label in allowed_fields.items():
-        value = evidence.get(key)
+    elif rule_id in ("HIGH_4XX_ERROR_RATE", "HIGH_5XX_ERROR_RATE"):
+        lines.append("Tipe: HTTP Access Log")
+        if "total_events" in evidence:
+            lines.append(f"Total HTTP Requests: {evidence['total_events']}")
+        if "error_count" in evidence:
+            lines.append(f"Error Count: {evidence['error_count']}")
+        if "error_rate_percent" in evidence:
+            thresh = evidence.get(
+                "threshold_rate_percent",
+                evidence.get("threshold", {}).get("rate_percent", "-"),
+            )
+            lines.append(f"Error Rate: {evidence['error_rate_percent']}% (Batas: {thresh}%)")
 
-        if value is not None:
-            lines.append(f"{label}: {value}")
+    elif rule_id == "REPEATED_ERROR_ENDPOINT":
+        if endpoint and endpoint.startswith("/service/"):
+            lines.append("Tipe: Microservice Repeated Error")
+        elif endpoint and endpoint.startswith("/class/"):
+            lines.append("Tipe: Exception Class Repeated Error")
+        else:
+            lines.append("Tipe: HTTP Endpoint Repeated Error")
+
+        if "error_count" in evidence:
+            lines.append(f"Error Count: {evidence['error_count']}")
+
+        # Rincian status_counts (step:xxx untuk APM, status code HTTP untuk HTTP, method:xxx untuk class)
+        status_counts = evidence.get("status_counts")
+        if isinstance(status_counts, dict) and status_counts:
+            breakdown_items = []
+            for k, v in list(status_counts.items())[:5]:
+                breakdown_items.append(f"{k}: {v}")
+            lines.append(f"Breakdown: {', '.join(breakdown_items)}")
+
+    elif rule_id == "HIGH_RESPONSE_TIME":
+        if "p95_ms" in evidence:
+            unit = evidence.get("unit", "ms")
+            thresh = evidence.get("threshold", "-")
+            lines.append(f"P95 Latency: {evidence['p95_ms']} {unit} (Batas: {thresh} {unit})")
+        if "slow_request_count" in evidence:
+            lines.append(f"Slow Requests / Steps: {evidence['slow_request_count']}")
+        if "slow_request_rate_percent" in evidence and evidence["slow_request_rate_percent"] is not None:
+            lines.append(f"Slow Ratio: {evidence['slow_request_rate_percent']}%")
+        if "sample_count" in evidence:
+            lines.append(f"Sample Count: {evidence['sample_count']}")
+
+    elif rule_id == "STALE_NO_LOG":
+        if "age_seconds" in evidence:
+            lines.append(f"Log Age: {evidence['age_seconds']} detik")
+        if "threshold_seconds" in evidence:
+            lines.append(f"Batas Stale: {evidence['threshold_seconds']} detik")
+        if "reason" in evidence:
+            lines.append(f"Reason: {evidence['reason']}")
+
+    else:
+        allowed_fields = {
+            "total_events": "Total Events",
+            "error_count": "Error Count",
+            "error_rate_percent": "Error Rate (%)",
+            "p95_ms": "P95 (ms)",
+            "slow_request_count": "Slow Requests",
+            "age_seconds": "Log Age (seconds)",
+            "reason": "Reason",
+        }
+        for key, label in allowed_fields.items():
+            val = evidence.get(key)
+            if val is not None:
+                lines.append(f"{label}: {val}")
+
+    # Periode window log
+    w_start = evidence.get("window_start")
+    w_end = evidence.get("window_end")
+    if w_start and w_end:
+        lines.append(f"Window: {to_wib(w_start)} s/d {to_wib(w_end)}")
 
     lines.extend([
         "",
-        "Buka Kibana untuk investigasi lebih lanjut."
+        "Investigasi: Gunakan Kibana atau AI Chat (/api/ai/chat) dengan trace_id/service terkait."
     ])
 
-    # Kirim ringkasan saja, bukan raw log,
-    # IP, payload, atau seluruh exception.
     return "\n".join(lines)[:4000]
 
 

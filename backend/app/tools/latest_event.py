@@ -1,6 +1,7 @@
 from app.es_client import get_es_client
 from app.tools.search_logs import SOURCE_FIELDS
 from app.tools.validators import validate_index_pattern
+from app.tools.time_utils import to_wib_iso, to_wib_str
 
 def get_latest_event(index: str) -> dict:
     index = validate_index_pattern(index)
@@ -29,8 +30,13 @@ def get_latest_event(index: str) -> dict:
             "event": None
         }
         
+    src = hits[0]["_source"]
+    if "@timestamp" in src:
+        src["timestamp_wib"] = to_wib_str(src["@timestamp"])
+        src["@timestamp"] = to_wib_iso(src["@timestamp"])
+
     return {
         "index": index,
         "found": True,
-        "event": hits[0]["_source"]
+        "event": src
     }

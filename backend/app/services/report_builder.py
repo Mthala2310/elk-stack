@@ -38,7 +38,7 @@ def _walk_records(value, depth=0):
             "events", "requests", "top_paths",
             "paths", "top_error_paths",
             "slow_requests", "buckets",
-            "_source", "event", "latest_event",
+            "hits", "_source", "event", "latest_event",
         ):
             if name in value:
                 yield from _walk_records(
@@ -76,7 +76,6 @@ def _top_paths(data):
         raw_path = (
             item.get("path")
             or item.get("request_path")
-            or item.get("key")
         )
         # Fallback jalur untuk Microservice APM
         if not raw_path and item.get("service_name"):
@@ -84,6 +83,9 @@ def _top_paths(data):
             raw_path = f"/service/{item['service_name']}->{step}" if step else f"/service/{item['service_name']}"
         elif not raw_path and item.get("caller_class"):
             raw_path = f"/class/{item['caller_class']}"
+        elif not raw_path and item.get("key"):
+            key_val = str(item["key"])
+            raw_path = key_val if key_val.startswith("/") else f"/service/{key_val}"
 
         path = _safe_path(raw_path)
 
@@ -195,17 +197,18 @@ def _latest_timestamp(data):
             continue
 
         try:
-            dt = datetime.fromisoformat(
-                value.replace("Z", "+00:00")
-            )
+            clean_val = value.replace("Z", "+00:00").replace(" WIB", "+07:00")
+            dt = datetime.fromisoformat(clean_val)
 
             if (
                 dt.tzinfo is not None
                 and dt.utcoffset() is not None
             ):
                 return dt.astimezone(WIB).isoformat()
+            else:
+                return dt.replace(tzinfo=timezone.utc).astimezone(WIB).isoformat()
 
-        except ValueError:
+        except Exception:
             continue
 
     return None

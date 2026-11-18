@@ -6,6 +6,7 @@ export function initAiChat() {
   const input = document.querySelector("#ai-input");
   const messages = document.querySelector("#ai-messages");
   const sendButton = document.querySelector("#ai-send");
+  const suggestionsBox = document.querySelector("#ai-suggestions");
 
   const indexLabel = document.querySelector(
     "#active-index-label"
@@ -15,6 +16,71 @@ export function initAiChat() {
   let activeIndex = sessionStorage.getItem(
     "activeLogIndex"
   ) || null;
+
+  // --------------------------------
+  // QUICK SUGGESTIONS (PHASE 5.2)
+  // --------------------------------
+
+  const SUGGESTIONS = [
+    {
+      label: "Ringkasan Log",
+      prompt: "Berikan ringkasan log dan metrik utama pada index aktif.",
+      autoSubmit: true,
+    },
+    {
+      label: "Analisis Error",
+      prompt: "Analisis error log atau HTTP 5xx terbaru pada index aktif.",
+      autoSubmit: true,
+    },
+    {
+      label: "Cek Request Lambat",
+      prompt: "Tampilkan request atau step eksekusi yang lambat (high duration/latency).",
+      autoSubmit: true,
+    },
+    {
+      label: "Lacak Trace ID",
+      prompt: "Lacak alur transaksi untuk trace_id: ",
+      autoSubmit: false,
+    },
+    {
+      label: "Cari Event ERROR",
+      prompt: "Cari log level ERROR terbaru beserta detail exception atau caller method-nya.",
+      autoSubmit: true,
+    },
+  ];
+
+  function renderSuggestions() {
+    if (!suggestionsBox) return;
+    suggestionsBox.replaceChildren();
+
+    SUGGESTIONS.forEach((item) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "suggestion-chip";
+      chip.textContent = item.label;
+
+      chip.addEventListener("click", () => {
+        if (sendButton.disabled) return;
+
+        let promptText = item.prompt;
+        if (!activeIndex && promptText.includes("index aktif")) {
+          promptText = promptText.replace("index aktif", "app-logs-*");
+        }
+
+        input.value = promptText;
+        if (item.autoSubmit) {
+          form.requestSubmit();
+        } else {
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      });
+
+      suggestionsBox.appendChild(chip);
+    });
+  }
+
+  renderSuggestions();
 
   // --------------------------------
   // TAMPILAN ACTIVE INDEX

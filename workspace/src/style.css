@@ -145,6 +145,51 @@ body {
 }
 
 /* =========================
+   QUICK SUGGESTIONS PILLS
+   ========================= */
+
+.ai-suggestions {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-top: 1px solid #e5e7eb;
+  scrollbar-width: thin;
+}
+
+.ai-suggestions::-webkit-scrollbar {
+  height: 4px;
+}
+
+.ai-suggestions::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.suggestion-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.suggestion-chip:hover {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+
+/* =========================
    INPUT
    ========================= */
 
@@ -651,6 +696,37 @@ body {
   font-weight: 600;
 }
 
+/* Schema Detection Badge */
+.schema-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.schema-badge.apm {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.schema-badge.http {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.schema-badge.hybrid {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
 /* Download Actions Bar */
 .report-download-bar {
   display: flex;
@@ -808,6 +884,14 @@ body {
   font-size: 11.5px;
 }
 
+.item-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
 .item-path {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
@@ -815,7 +899,29 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 180px;
+  max-width: 220px;
+}
+
+.item-sub {
+  font-size: 10px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.trace-chip {
+  display: inline-block;
+  font-family: ui-monospace, monospace;
+  font-size: 9.5px;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-top: 2px;
+  width: fit-content;
 }
 
 /* Plain text values, NOT oval pills */

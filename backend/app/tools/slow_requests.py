@@ -6,6 +6,7 @@ from app.tools.validators import (
     validate_index_pattern,
     validate_limit,
 )
+from app.tools.time_utils import to_wib_iso, to_wib_str
 
 SOURCE_FIELDS = [
     "@timestamp",
@@ -167,6 +168,9 @@ def get_slow_requests(
             source["request_path"] = f"/{service}->{step}" if step else f"/{service}"
 
         source["effective_duration_ms"] = effective_duration
+        if "@timestamp" in source:
+            source["timestamp_wib"] = to_wib_str(source["@timestamp"])
+            source["@timestamp"] = to_wib_iso(source["@timestamp"])
         events.append(source)
 
     return {

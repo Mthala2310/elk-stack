@@ -179,47 +179,83 @@ def mark_sending(conn, window_id, part):
 # 2. FORMAT LAPORAN
 # =====================================
 
-def build_report_text(report, screenshot_ready):
+def build_report_text(report, screenshot_ready=False):
 
     period = report["period"]
     statuses = report.get("status_classes", {})
     errors = report.get("errors", {})
+    schema = report.get("schema_detected", "unknown")
+    log_levels = report.get("log_levels", {})
 
     lines = [
         "📊 HOURLY MONITORING REPORT",
         "",
         f"Index: {report['index']}",
-        f"Start: {period['start']}",
-        f"End: {period['end']}",
-        "",
-        f"Total Requests: {report['total_requests']:,}",
-        f"HTTP 2xx: {statuses.get('2xx', 0):,}",
-        f"HTTP 3xx: {statuses.get('3xx', 0):,}",
-        f"HTTP 4xx: {statuses.get('4xx', 0):,}",
-        f"HTTP 5xx: {statuses.get('5xx', 0):,}",
-        "",
-        (
-            "Error Rate: "
-            f"{errors.get('error_rate_percent', 0)}%"
-        ),
-        (
-            "4xx Rate: "
-            f"{errors.get('client_error_rate_percent', 0)}%"
-        ),
-        (
-            "5xx Rate: "
-            f"{errors.get('server_error_rate_percent', 0)}%"
-        ),
-        "",
-        "Top Error Endpoints:",
     ]
+
+    # Sesuaikan metrik ringkasan dengan jenis log (Dual-Mode)
+    if schema == "microservice_tracing":
+        lines.extend([
+            "Schema: Microservice APM / Tracing",
+            f"Start: {period['start']}",
+            f"End: {period['end']}",
+            "",
+            f"Total Events: {report['total_requests']:,}",
+            f"Log DEBUG: {log_levels.get('DEBUG', 0):,}",
+            f"Log INFO: {log_levels.get('INFO', 0):,}",
+            f"Log WARN: {log_levels.get('WARN', 0):,}",
+            f"Log ERROR: {log_levels.get('ERROR', 0):,}",
+            f"Execution Metrics: {report.get('execution_metrics_count', 0):,}",
+            "",
+            f"Error Rate: {errors.get('error_rate_percent', 0)}%",
+            f"Error Logs: {errors.get('error_logs', 0):,}",
+            f"Warn Logs: {errors.get('warn_logs', 0):,}",
+            "",
+            "Top Error Services / Callers:",
+        ])
+    elif schema == "hybrid":
+        lines.extend([
+            "Schema: Hybrid (HTTP + Microservice Tracing)",
+            f"Start: {period['start']}",
+            f"End: {period['end']}",
+            "",
+            f"Total Events: {report['total_requests']:,}",
+            f"HTTP 2xx: {statuses.get('2xx', 0):,} | 3xx: {statuses.get('3xx', 0):,}",
+            f"HTTP 4xx: {statuses.get('4xx', 0):,} | 5xx: {statuses.get('5xx', 0):,}",
+            f"Log DEBUG: {log_levels.get('DEBUG', 0):,} | INFO: {log_levels.get('INFO', 0):,}",
+            f"Log WARN: {log_levels.get('WARN', 0):,} | ERROR: {log_levels.get('ERROR', 0):,}",
+            f"Execution Metrics: {report.get('execution_metrics_count', 0):,}",
+            "",
+            f"Overall Error Rate: {errors.get('error_rate_percent', 0)}%",
+            f"HTTP 4xx Rate: {errors.get('client_error_rate_percent', 0)}% | 5xx Rate: {errors.get('server_error_rate_percent', 0)}%",
+            "",
+            "Top Error Endpoints & Services:",
+        ])
+    else:
+        # Format HTTP lama / default
+        lines.extend([
+            f"Start: {period['start']}",
+            f"End: {period['end']}",
+            "",
+            f"Total Requests: {report['total_requests']:,}",
+            f"HTTP 2xx: {statuses.get('2xx', 0):,}",
+            f"HTTP 3xx: {statuses.get('3xx', 0):,}",
+            f"HTTP 4xx: {statuses.get('4xx', 0):,}",
+            f"HTTP 5xx: {statuses.get('5xx', 0):,}",
+            "",
+            f"Error Rate: {errors.get('error_rate_percent', 0)}%",
+            f"4xx Rate: {errors.get('client_error_rate_percent', 0)}%",
+            f"5xx Rate: {errors.get('server_error_rate_percent', 0)}%",
+            "",
+            "Top Error Endpoints:",
+        ])
 
     top_paths = report.get(
         "top_error_endpoints", []
     )
 
     if not top_paths:
-        lines.append("- Tidak tersedia")
+        lines.append("- Tidak ada error tercatat")
 
     else:
         for item in top_paths[:5]:
@@ -227,8 +263,25 @@ def build_report_text(report, screenshot_ready):
 
             if INCLUDE_PATHS:
                 path = item["path"]
+                extra = ""
+                if item.get("steps"):
+                    if isinstance(item["steps"], dict):
+                        steps_preview = ", ".join([f"{k}: {v}" for k, v in list(item["steps"].items())[:3]])
+                    elif isinstance(item["steps"], list):
+                        steps_preview = ", ".join([f"{s.get('step_name', s)}: {s.get('count', '')}" if isinstance(s, dict) else str(s) for s in item["steps"][:3]])
+                    else:
+                        steps_preview = str(item["steps"])
+                    extra = f" ({steps_preview})"
+                elif item.get("methods"):
+                    if isinstance(item["methods"], dict):
+                        methods_preview = ", ".join([f"{k}: {v}" for k, v in list(item["methods"].items())[:3]])
+                    elif isinstance(item["methods"], list):
+                        methods_preview = ", ".join([f"{m.get('method', m)}: {m.get('count', '')}" if isinstance(m, dict) else str(m) for m in item["methods"][:3]])
+                    else:
+                        methods_preview = str(item["methods"])
+                    extra = f" ({methods_preview})"
                 lines.append(
-                    f"- {path[:120]}: {count} errors"
+                    f"- {path[:120]}: {count} errors{extra}"
                 )
             else:
                 lines.append(
@@ -237,7 +290,7 @@ def build_report_text(report, screenshot_ready):
 
     lines.extend([
         "",
-        "Slow Requests:",
+        "Slow Requests / Steps:",
     ])
 
     slow = report.get("slow_request_samples", [])
@@ -246,8 +299,10 @@ def build_report_text(report, screenshot_ready):
         lines.append("- Tidak tersedia")
     else:
         for item in slow[:3]:
+            path_label = f"{item['path']}: " if item.get("path") and INCLUDE_PATHS else ""
+            trace_label = f" [Trace: {item['trace_id']}]" if item.get("trace_id") else ""
             lines.append(
-                f"- {item['response_time_ms']} ms"
+                f"- {path_label}{item['response_time_ms']} ms{trace_label}"
             )
 
     lines.extend([

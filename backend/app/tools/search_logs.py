@@ -5,6 +5,7 @@ from app.tools.validators import (
     validate_index_pattern,
     validate_limit,
 )
+from app.tools.time_utils import to_wib_iso, to_wib_str
 
 SOURCE_FIELDS = [
     "@timestamp",
@@ -172,7 +173,13 @@ def search_logs(
         else result["hits"]["total"]
     )
 
-    events = [hit["_source"] for hit in hits]
+    events = []
+    for hit in hits:
+        src = hit["_source"]
+        if "@timestamp" in src:
+            src["timestamp_wib"] = to_wib_str(src["@timestamp"])
+            src["@timestamp"] = to_wib_iso(src["@timestamp"])
+        events.append(src)
 
     return {
         "index": index,

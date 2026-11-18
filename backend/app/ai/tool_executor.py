@@ -46,7 +46,15 @@ def build_time_range(arguments: dict[str, Any]) -> TimeRange:
     return TimeRange(start=start_dt, end=end_dt)
 
 
-def execute_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+def execute_tool(
+    tool_name: str,
+    arguments: dict[str, Any] | None = None,
+    tool_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if arguments is None and tool_args is not None:
+        arguments = tool_args
+    if arguments is None:
+        arguments = {}
     index = str(_opt(arguments, "index", "app-logs-*"))
 
     if tool_name == "get_index_info":

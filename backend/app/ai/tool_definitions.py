@@ -410,3 +410,6 @@ OPENROUTER_TOOLS = [
         },
     },
 ]
+
+# Alias untuk backward compatibility dan testing
+TOOLS_SCHEMA = OPENROUTER_TOOLS
