@@ -125,13 +125,3 @@ python3 generator_endPoint.py
 ```
 
 ---
-
-## 🧪 Verifikasi Sistem & Smoke Test
-
-Platform ini dilengkapi rangkaian pengujian *End-to-End Smoke Test* otomatis untuk memvalidasi integritas data, normalisasi waktu, AI tools, dan koneksi Elasticsearch:
-
-```bash
-backend/.venv/bin/python3 verify_phase5_e2e.py
-```
-
-**Hasil Verifikasi (7/7 Suites Berhasil):**
