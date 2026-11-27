@@ -51,3 +51,87 @@ Pengembangan platform dilakukan secara bertahap mulai akhir September 2026:
 ## Pengujian & Pemisahan Tanggung Jawab
 
 Pengujian integrasi dilakukan pada keterhubungan *frontend*, *backend*, *Incident Worker*, *Notification Worker*, dan *Report Worker*, termasuk skenario kemunculan error baru serta *troubleshooting* koneksi antarkomponen. Arsitektur ini menerapkan pemisahan tanggung jawab (*separation of concerns*) antara pengumpulan log, deteksi insiden, pengiriman notifikasi, dan pembuatan laporan agar kendala pada satu bagian tidak menghentikan keseluruhan alur kerja secara langsung.
+
+### 1. Menjalankan Infrastruktur Docker (ELK Cluster + Redis)
+```bash
+# Pastikan Docker Desktop / daemon aktif
+docker compose up -d elasticsearch redis logstash kibana filebeat
+```
+Verifikasi port layanan:
+- **Elasticsearch**: `http://localhost:9200`
+- **Kibana Web UI**: `http://localhost:5601`
+- **Logstash API**: `http://localhost:9600`
+- **Redis CLI**: `localhost:6379`
+
+### 2. Menjalankan FastAPI Backend
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Jalankan server API
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+Akses Swagger UI API: `http://localhost:8000/docs`
+
+### 3. Menjalankan Frontend Workspace SPA
+```bash
+cd workspace
+npm install
+npm run dev -- --host
+```
+Akses Workspace Portal: `http://localhost:5173`
+
+### 4. Menjalankan Background Automation Workers
+Buka terminal terpisah untuk masing-masing worker:
+
+```bash
+# A. Incident Detection Worker (Mengevaluasi anomali tiap 60s)
+cd incident-worker
+python3 worker.py
+
+# B. Notification Worker (Mendistribusikan alert ke Telegram tiap 10s)
+cd notification-worker
+python3 worker.py
+
+# (Opsional) Memaksa pengiriman ulang antrean UNCERTAIN yang tertahan:
+python3 worker.py --retry-uncertain --once
+
+# C. Report Worker (Menjadwalkan laporan eksekutif berkala)
+cd report-worker
+python3 scheduler.py
+```
+
+### 5. Menjalankan Log Generator (Simulasi Lalu Lintas Data)
+
+```bash
+# A. Generator Log Microservices Skala Industri (9 Services, 5 Workflows)
+cd generators/generator-microservices
+
+# Simulasi realistis (92% normal, 5% slow, 3% exceptions):
+python3 log_generator.py --count 10 --mode realistic
+
+# Simulasi streaming real-time baris-per-baris:
+python3 log_generator.py --stream --interval 0.5
+
+# Simulasi skenario insiden (Core banking timeout / High Error Rate):
+python3 log_generator.py --count 15 --mode core_timeout
+python3 log_generator.py --count 15 --mode high_error_rate
+
+# B. Generator Log HTTP Web Access
+cd generators/generator-http
+python3 generator_endPoint.py
+```
+
+---
+
+## 🧪 Verifikasi Sistem & Smoke Test
+
+Platform ini dilengkapi rangkaian pengujian *End-to-End Smoke Test* otomatis untuk memvalidasi integritas data, normalisasi waktu, AI tools, dan koneksi Elasticsearch:
+
+```bash
+backend/.venv/bin/python3 verify_phase5_e2e.py
+```
+
+**Hasil Verifikasi (7/7 Suites Berhasil):**
