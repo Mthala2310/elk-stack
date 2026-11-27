@@ -5,6 +5,7 @@ from app.models import TimeRange
 from app.tools.validators import (
     validate_index_pattern,
     validate_limit,
+    resolve_search_index,
 )
 
 
@@ -16,6 +17,7 @@ def get_top_error_paths(
 ) -> dict:
 
     index = validate_index_pattern(index)
+    search_index = resolve_search_index(index)
     limit = validate_limit(limit)
 
     error_class = error_class.lower()
@@ -74,7 +76,7 @@ def get_top_error_paths(
     # - top_microservices: untuk log Microservice Pola A/B/C (punya service_name)
     # - top_callers_no_service: untuk log Microservice Pola D fallback (hanya punya caller_class, tanpa service_name)
     result = es.search(
-        index=index,
+        index=search_index,
         size=0,
         track_total_hits=True,
         query={"bool": {"filter": filters}},

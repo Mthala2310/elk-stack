@@ -43,6 +43,29 @@ def validate_index_pattern(index_pattern: str) -> str:
 
     return value
 
+
+def resolve_search_index(index_pattern: str) -> str:
+    """
+    Jika index adalah daily index spesifik (contoh: app-logs-2026.09.14),
+    arahkan query pencarian Elasticsearch ke pattern wildcard 'app-logs-*'.
+    
+    Alasan Arsitektur:
+    Logstash mempartisi index harian berdasarkan tanggal UTC ('app-logs-%{+YYYY.MM.dd}').
+    Karena zona waktu sistem adalah WIB (UTC+7):
+    Satu hari penuh tanggal 14 Sep WIB (00:00:00 s/d 23:59:59 WIB) secara fisik tersebar di:
+      - 00:00 - 07:00 WIB di index 'app-logs-2026.09.13' (UTC 17:00 - 24:00 kemarin)
+      - 07:00 - 24:00 WIB di index 'app-logs-2026.09.14' (UTC 00:00 - 17:00 hari ini)
+    Dengan mengarahkan query pencarian ke 'app-logs-*' yang difilter oleh range @timestamp,
+    Elasticsearch secara otomatis menarik data 24 jam penuh tanpa terpotong shard UTC,
+    persis seperti perilaku Kibana Discover.
+    """
+    clean = index_pattern.strip()
+    match = re.match(r"^([a-zA-Z0-9_-]+)-\d{4}[._-]\d{2}[._-]\d{2}$", clean)
+    if match:
+        prefix = match.group(1)
+        return f"{prefix}-*"
+    return clean
+
 def validate_limit(limit: int) -> int:
     max_results = get_settings().tool_max_results
     if limit < 1:

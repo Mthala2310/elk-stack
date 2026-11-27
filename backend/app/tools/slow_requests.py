@@ -5,6 +5,7 @@ from app.models import TimeRange
 from app.tools.validators import (
     validate_index_pattern,
     validate_limit,
+    resolve_search_index,
 )
 from app.tools.time_utils import to_wib_iso, to_wib_str
 
@@ -44,6 +45,7 @@ def get_slow_requests(
 ) -> dict:
 
     index = validate_index_pattern(index)
+    search_index = resolve_search_index(index)
     limit = validate_limit(limit)
 
     if offset < 0:
@@ -115,7 +117,7 @@ def get_slow_requests(
     # 3. Pengurutan dual-mode:
     # Memprioritaskan field yang tersedia tanpa error jika salah satu tidak ada
     result = es.search(
-        index=index,
+        index=search_index,
         from_=offset,
         size=limit,
         track_total_hits=True,

@@ -58,6 +58,10 @@ MAX_ATTEMPTS = int(
     os.getenv("NOTIFICATION_MAX_ATTEMPTS", "5")
 )
 
+RETRY_UNCERTAIN = os.getenv(
+    "NOTIFICATION_RETRY_UNCERTAIN", "true"
+).strip().lower() in ("true", "1", "yes")
+
 if min(POLL_SECONDS, RETRY_SECONDS, MAX_ATTEMPTS) < 1:
     raise ValueError(
         "Konfigurasi notification harus positif."
@@ -238,14 +242,16 @@ def read_events(baseline):
 def process_retries(conn):
     """
     Memeriksa dan mengirim ulang notifikasi yang
-    sebelumnya gagal sementara (status RETRY).
+    sebelumnya gagal sementara (status RETRY atau UNCERTAIN jika diaktifkan).
     """
     now = datetime.now(WIB).isoformat()
 
-    rows = conn.execute("""
+    status_filter = "('RETRY', 'UNCERTAIN')" if RETRY_UNCERTAIN else "('RETRY')"
+
+    rows = conn.execute(f"""
         SELECT event_id
         FROM notification_delivery
-        WHERE status = 'RETRY'
+        WHERE status IN {status_filter}
           AND (next_retry_at IS NULL OR next_retry_at <= ?)
           AND attempts < ?
         ORDER BY event_id ASC
@@ -471,9 +477,9 @@ def reserve_event(conn, event):
 
             return 1
 
-        # Hanya event RETRY yang boleh
-        # dicoba kembali secara otomatis.
-        if row["status"] != "RETRY":
+        # Event yang boleh dicoba kembali secara otomatis
+        allowed_statuses = ("RETRY", "UNCERTAIN") if RETRY_UNCERTAIN else ("RETRY",)
+        if row["status"] not in allowed_statuses:
             return None
 
         attempts = row["attempts"]
@@ -552,8 +558,16 @@ def classify_failure(exc):
     if "Telegram HTTP 429" in message:
         return "RETRY"
 
-    # Connection belum berhasil dibangun.
-    if "ConnectTimeout" in message:
+    # Connection belum berhasil dibangun (DNS drop, socket error, connection refused).
+    if any(
+        err in message
+        for err in (
+            "ConnectTimeout",
+            "ConnectionError",
+            "NewConnectionError",
+            "MaxRetryError",
+        )
+    ):
         return "RETRY"
 
     # Request tidak valid atau akses ditolak.
@@ -563,9 +577,8 @@ def classify_failure(exc):
     ):
         return "FAILED_FINAL"
 
-    # ReadTimeout, putus koneksi, atau
-    # response tak pasti: jangan otomatis
-    # kirim ulang karena bisa sudah terkirim.
+    # ReadTimeout, putus koneksi di tengah respons, atau
+    # proses terinterupsi saat request berlangsung.
     return "UNCERTAIN"
 
 
@@ -609,12 +622,12 @@ def process_event(conn, event):
 
         retry_at = None
 
-        if state == "RETRY":
+        if state in ("RETRY", "UNCERTAIN"):
 
             if attempt >= MAX_ATTEMPTS:
                 state = "FAILED_FINAL"
 
-            else:
+            elif state == "RETRY" or RETRY_UNCERTAIN:
                 delay = min(
                     RETRY_SECONDS * (2 ** (attempt - 1)),
                     1800
@@ -647,6 +660,23 @@ def process_event(conn, event):
         )
 
 
+def reset_uncertain_events(conn) -> int:
+    """
+    Me-reset semua event berstatus UNCERTAIN menjadi RETRY
+    agar segera dikirim ulang oleh antrean worker.
+    """
+    with conn:
+        cursor = conn.execute("""
+            UPDATE notification_delivery
+            SET status = 'RETRY',
+                next_retry_at = NULL,
+                updated_at = ?
+            WHERE status = 'UNCERTAIN'
+        """, (datetime.now(WIB).isoformat(),))
+        count = cursor.rowcount
+    return count
+
+
 # ====================================
 # 11. WORKER LOOP
 # ====================================
@@ -661,11 +691,25 @@ def main():
         help="Periksa event satu kali"
     )
 
+    parser.add_argument(
+        "--retry-uncertain",
+        action="store_true",
+        help="Reset semua event berstatus UNCERTAIN agar segera dikirim ulang"
+    )
+
     args = parser.parse_args()
 
     # Membaca watermark terkini dan menyiapkan
     # tabel status pengiriman.
     watermark, latest_incident = initialize()
+
+    if args.retry_uncertain:
+        with closing(connect_state()) as conn:
+            reset_count = reset_uncertain_events(conn)
+            print(
+                f"[RETRY-UNCERTAIN] Berhasil me-reset {reset_count} event UNCERTAIN ke status RETRY.",
+                flush=True
+            )
 
     print(
         "[NOTIFICATION WORKER] Started",

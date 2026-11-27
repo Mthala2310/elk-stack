@@ -7,7 +7,10 @@ from app.tools.error_rules import (
     BUSINESS_4XX,
     TECHNICAL_4XX,
 )
-from app.tools.validators import validate_index_pattern
+from app.tools.validators import (
+    validate_index_pattern,
+    resolve_search_index,
+)
 
 WIB = timezone(timedelta(hours=7))
 
@@ -108,6 +111,7 @@ def get_error_peak_hours(
     window_hours: int = 1,
 ) -> dict:
     index = validate_index_pattern(index)
+    search_index = resolve_search_index(index)
 
     if window_hours not in {1, 2, 3}:
         raise ValueError("window_hours harus bernilai 1, 2, atau 3.")
@@ -172,7 +176,7 @@ def get_error_peak_hours(
     }
 
     result = es.search(
-        index=index,
+        index=search_index,
         size=0,
         query=query,
         aggs=aggs,
